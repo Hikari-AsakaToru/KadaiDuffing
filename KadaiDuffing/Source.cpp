@@ -1,18 +1,26 @@
 #include "Common.h"
 #include "StringOpenGL.h"
 class DuffingSolv;
+constexpr double NAN_DEF = std::numeric_limits<double>::has_quiet_NaN;
+
 DuffingSolv	*Rung_global_pointer;
-GLFONT		*font;
-int winID[3];
+int winID[4];
 #define glAxisColor			glColor3d(1.0,0.0,0.0)
 #define glProtColor			glColor3d(0.0,1.0,0.0)
 #define glBackGroundColor	glColor3d(0.0,0.0,0.0)
 #define glScaleColor		glColor3d(1.0,1.0,1.0)
 #define glScalePlotColor	glColor3d(0.5,0.5,0.5)
+#define glMassColor			glColor3d(0.5,0.5,0.5)
 void Idle() {
 	glutPostRedisplay();
 }
+GLfloat top = -0.9;
+void timer(int value) {
 
+
+	glutTimerFunc(10, timer, 0);
+	glutPostRedisplay();
+}
 
 class DuffingSolv {
 	RungeKuttaSolve Solver;
@@ -22,6 +30,7 @@ class DuffingSolv {
 	InputRung InitStatus;
 	Max MaxPara;
 	bool SetCoffdfdt;
+	unsigned int Loop;
 	inline void DrawScalePlotLineX() {
 		for (auto i = 0; i < Scale; i++) {
 			glScalePlotColor;
@@ -44,7 +53,12 @@ class DuffingSolv {
 			std::string Tmp;
 		for (auto i = 0; i < Scale; i++) {
 			glScaleColor;
-			double ValX = (this->*TypeScaleX)((int)i);
+			double ValX;
+			ValX = (this->*TypeScaleX)((int)i);
+			if (ValX == NAN_DEF){
+				return;
+			}
+
 			Tmp = std::to_string(ValX);
 			if (ValX < 0) {
 				Tmp.erase(Tmp.begin() + 5, Tmp.end());
@@ -89,19 +103,25 @@ class DuffingSolv {
 		return MaxPara.x / Range*(i - Scale / 2);
 	}
 	inline double GetScaleT(int i) {
-		return (Output.size()*CoffList.Getdt() / 2.0)*i*2 ;
+		return (Output.size()*CoffList.Getdt())*i/10 ;
 	}
 	inline double GetScaleP(int i) {
 		return MaxPara.p / Range*(i - Scale / 2);
 	}
+	inline double NotScale(int i) {
+		return NAN_DEF;
+	}
 public:
 	double Range;
+	double Offset;
 	template<class TYPE,class NUM> DuffingSolv(const TYPE dt, const TYPE TRange, const NUM NumSeg) {
 		Output.resize((int)(TRange / dt + 1));
 		Analyze.resize((int)(TRange / dt + 1));
 		Solver.Init();
 		SetCoffdfdt = FALSE;
 		Range = InitRange;
+		Offset = InitOffset;
+		Loop = 0;
 	}
 	inline void SetParam(Cofficient SetCoff, const InputRung Inp) {
 		CoffList.SetCoff(SetCoff);
@@ -116,16 +136,16 @@ public:
 		SetCoffdfdt = TRUE;
 	}
 	inline void CalcDffingEqudydx() {
-		Output[0] = InitStatus;
+		Analyze[0] = InitStatus;
 		if (SetCoffdfdt) {
-			for (auto Itr = Output.begin(); Itr != Output.end(); Itr++) {
+			for (auto Itr = Analyze.begin(); Itr != Analyze.end(); Itr++) {
 				Solver.CalcRungeSolveOnce(&(*Itr));
 				CoffList.UpdateCoff();
 				Solver.SetCoff(CoffList);
 			}
 		}
 		else {
-			Solver.CalcRungeSolve(&Output);
+			Solver.CalcRungeSolve(&Analyze);
 		}
 
 	}
@@ -135,8 +155,8 @@ public:
 		//for (auto Rungitr = Output.begin(); Rungitr != Output.end(); Rungitr++) {
 		//	OutputFile << (*Rungitr).t << "," << (*Rungitr).x << "," << (*Rungitr).p << std::endl;
 		//}
-		for (auto Rungitr =0; Rungitr < Output.size(); Rungitr++) {
-			OutputFile << Output[Rungitr].t << "," << Output[Rungitr].x << "," << Output[Rungitr].p << std::endl;
+		for (auto Rungitr =0; Rungitr < Analyze.size(); Rungitr++) {
+			OutputFile << Analyze[Rungitr].t << "," << Analyze[Rungitr].x << "," << Analyze[Rungitr].p << std::endl;
 		}
 
 
@@ -146,25 +166,28 @@ public:
 		Quantum();
 	}
 	inline void Quantum() {
-		for (auto i = 0; i < Output.size(); i++) {
-			Output[i].x = Output[i].x / (MaxPara.x / Range);
-			Output[i].p = Output[i].p / (MaxPara.p / Range);
-			Output[i].t = Output[i].t / (Output.size()*CoffList.Getdt() / 2.0) - 1.0;
+		auto Data = Analyze;
+		auto Outitr = Output.begin();
+		for (auto itr = Data.begin(); itr !=Data.end(); itr++) {
+			(*Outitr).x = (*itr).x / (MaxPara.x / Range);
+			(*Outitr).p = (*itr).p / (MaxPara.p / Range);
+			(*Outitr).t = (*itr).t / (Data.size()*CoffList.Getdt() / 2.0) - 1.0;
+			Outitr++;
 		}
 
 	}
 	inline void SearchMax() {
-		MaxPara.x = Output[0].x;
-		MaxPara.p = Output[0].p;
+		MaxPara.x = Analyze[0].x;
+		MaxPara.p = Analyze[0].p;
 
-		for (auto i = 1; i < Output.size(); i++) {
-			if (MaxPara.x < Output[i].x)
+		for (auto i = 1; i <  Analyze.size(); i++) {
+			if (MaxPara.x <  Analyze[i].x)
 			{
-				MaxPara.x = Output[i].x;
+				MaxPara.x = Analyze[i].x;
 			}
-			if (MaxPara.p < Output[i].p)
+			if (MaxPara.p < Analyze[i].p)
 			{
-				MaxPara.p = Output[i].p;
+				MaxPara.p = Analyze[i].p;
 			}
 		}
 	}
@@ -193,6 +216,27 @@ public:
 			glVertex2d(Rung_global_pointer->Output[i].t, Rung_global_pointer->Output[i].p);
 		}
 		glEnd();
+	}
+	inline void DrawBall() {
+		glPushMatrix();
+		glMassColor;
+		glTranslated(0.0, Output[Loop%Output.size()].x,0.3);
+		glutSolidSphere(0.1, 40, 40);
+		glPopMatrix();
+	}
+	inline void DrawTime() {
+		std::string TimeDisp;
+		glScaleColor;
+		TimeDisp = std::to_string(Analyze[Loop%Output.size()].t);
+		glRasterPos2d(-0.70,0.70);
+		glutBitmapString(GLUT_BITMAP_TIMES_ROMAN_24, reinterpret_cast<const unsigned char*>(TimeDisp.c_str()));
+
+	}
+	inline void DrawOutputModel() {
+			//@‚Ì•`‰æ
+		DrawBall();
+		DrawTime();
+		Loop++;
 	}
 	inline void DrawAxis(double (DuffingSolv::*TypeScaleX)(int), double (DuffingSolv::*TypeScaleY)(int)) {
 		DrawScale(TypeScaleX, TypeScaleY);
@@ -227,9 +271,25 @@ public:
 		Rung_global_pointer->DrawAxis(&DuffingSolv::GetScaleT, &DuffingSolv::GetScaleP);
 		glutSwapBuffers();
 	}
-	inline static void MouseWheel(int wheel_number, int direction, int x, int y){
+	inline static void dispModel() {
+
+		glClear(GL_COLOR_BUFFER_BIT);
+		Rung_global_pointer->DrawOutputModel();
+		Rung_global_pointer->DrawAxis(&DuffingSolv::NotScale, &DuffingSolv::GetScaleX);
+		glutSwapBuffers();
+		glutPostRedisplay();
+
+	}
+
+	inline static void MouseWheel(int wheel_number, int direction, int x, int y) {
 		if (direction == 1) { Rung_global_pointer->Range += 0.01; }
 		else { Rung_global_pointer->Range -= 0.01; }
+		Rung_global_pointer->Quantum();
+		glutPostRedisplay();
+	}
+	inline static void MouseWheelX(int wheel_number, int direction, int x, int y) {
+		if (direction == 1) { Rung_global_pointer->Offset += 0.1; }
+		else { Rung_global_pointer->Offset -= 0.1; }
 		Rung_global_pointer->Quantum();
 		glutPostRedisplay();
 	}
@@ -240,19 +300,22 @@ public:
 		glutInitWindowSize(400, 300);
 		glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA);
 		winID[0] = glutCreateWindow("Duffing T-X");
-		font = new GLFONT(L"‚l‚r–¾’©", 24);
 		glutDisplayFunc(dispTX);
-		glutMouseWheelFunc(MouseWheel);
+		glutMouseWheelFunc(MouseWheelX);
 		glutInitWindowPosition(600, 100);
 		glutInitWindowSize(400, 300);
 		winID[1] = glutCreateWindow("Duffing T-P");
 		glutDisplayFunc(dispTP);
-		glutMouseWheelFunc(MouseWheel);
+		glutMouseWheelFunc(MouseWheelX);
 		glutInitWindowPosition(200, 500);
 		glutInitWindowSize(400, 300);
-		winID[1] = glutCreateWindow("Duffing X-P");
+		winID[2] = glutCreateWindow("Duffing X-P");
 		glutDisplayFunc(dispXP);
 		glutMouseWheelFunc(MouseWheel);
+		glutInitWindowPosition(600, 500);
+		glutInitWindowSize(400, 300);
+		winID[3] = glutCreateWindow("Duffing Physhics Model");
+		glutDisplayFunc(dispModel);
 		glutMainLoop();
 	}
 };

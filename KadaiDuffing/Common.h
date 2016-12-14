@@ -4,15 +4,17 @@
 #include <string>
 #include <fstream>
 #include <gl/freeglut.h>
+#include <limits>
 #define PI 4*std::atan(1)
 #define InitRange 0.7
+#define InitOffset 0.0
 #define Scale 10
-
 struct Max
 {
 	double x;
 	double p;
 };
+
 struct CoffData{
 	double Alpha;	// x'
 	double Beta;	// x
