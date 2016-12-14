@@ -1,7 +1,7 @@
 #include "Common.h"
 #include "StringOpenGL.h"
-class RungeKutta;
-RungeKutta	*Rung_global_pointer;
+class DuffingSolv;
+DuffingSolv	*Rung_global_pointer;
 GLFONT		*font;
 int winID[3];
 #define glAxisColor			glColor3d(1.0,0.0,0.0)
@@ -9,96 +9,19 @@ int winID[3];
 #define glBackGroundColor	glColor3d(0.0,0.0,0.0)
 #define glScaleColor		glColor3d(1.0,1.0,1.0)
 #define glScalePlotColor	glColor3d(0.5,0.5,0.5)
+void Idle() {
+	glutPostRedisplay();
+}
 
 
-struct Max
-{
-	double x;
-	double p;
-};
-struct Cofficient {
-protected:
-	double Alpha;	// x'
-	double Beta;	// x
-	double Gunma;	// x^3
-	double Delta;	// cos
-	double Omega;	// wtŠp‘¬“x
-	double dOmegadt;	// wtŠp‘¬“x
-	double Phi;		// wtˆÊ‘Š
-	double H;		// dt
-	double Wn;		// ŒÅ—LU“®”
-	double Zeta;	// Œ¸Š”ä
-public:
-	inline void SetCoff(const double dt, const double dxdt, const double x, const double x3, const double cos, const double AddFreq, const double PhiIn) {
-		Alpha = dxdt;
-		Beta = x;
-		Gunma = x3;
-		Delta = cos;
-		Omega = 2 * 3.1415*AddFreq;
-		Wn = 0.0;
-		Zeta = 0.0;
-		Phi = PhiIn;
-		H = dt;
-		dOmegadt = 0.0;
-	}
-	inline void SetRawData(const double m, const double k, const double c, const double AddFreq,
-				const double f0 , const double dt, const double coffX3, const double PhiIn)
-	{
-		Zeta = c/(2*std::sqrt(m*k));
-		Wn = 2*3.1415*std::sqrt(k / m);
-		Alpha = 2 * Zeta *Wn;
-		Beta = k / m;
-		Gunma = coffX3*Wn;
-		Delta = f0 / m;
-		Omega = 2*3.1415*AddFreq;
-		H = dt;
-		Phi = PhiIn;
-		dOmegadt = 0.0;
-	}
-	inline double GetCoffdydx() {
-		return Alpha;
-	}
-	inline double GetCoffx() {
-		return Beta;
-	}
-	inline double GetCoffx3() {
-		return Gunma;
-	}
-	inline double GetCoffcos() {
-		return Delta;
-	}
-	inline double GetOmega() {
-		return Omega;
-	}
-	inline double Getdt() {
-		return H;
-	}
-	inline void UpdateParam() {
-		this->Omega += dOmegadt*H;
-	}
-	inline void SetTimeOmega(double dt) {
-		this->dOmegadt = dt;
-	}
-};
-struct InputRung {
-	double t;
-	double x;
-	double p;
-}typedef  RungState;
-#define PI 4*std::atan(1)
-class RungeKutta {
+class DuffingSolv {
+	RungeKuttaSolve Solver;
 	std::vector<RungState> Output;
-	std::vector<double> Calcx;
-	std::vector<double> Calcdxdt;
-	Cofficient CoffList;
+	std::vector<RungState> Analyze;
+	CoffcientFunc CoffList;
 	InputRung InitStatus;
 	Max MaxPara;
-	double Getdydx(const InputRung Inp,const double t, const double x, const double p) {
-		return -CoffList.GetCoffdydx()*(Inp.p + p) 
-			+ CoffList.GetCoffx()*(Inp.x + x) 
-			- CoffList.GetCoffx3()*std::pow((Inp.x + x),3.0)
-			+ CoffList.GetCoffcos()*std::cos(CoffList.GetOmega()*(Inp.t+t));
-	}
+	bool SetCoffdfdt;
 	inline void DrawScalePlotLineX() {
 		for (auto i = 0; i < Scale; i++) {
 			glScalePlotColor;
@@ -117,7 +40,7 @@ class RungeKutta {
 			glEnd();
 		}
 	}
-	inline void DrawScaleX(double (RungeKutta::*TypeScaleX)(int)) {
+	inline void DrawScaleX(double (DuffingSolv::*TypeScaleX)(int)) {
 			std::string Tmp;
 		for (auto i = 0; i < Scale; i++) {
 			glScaleColor;
@@ -135,7 +58,7 @@ class RungeKutta {
 		}
 		DrawScalePlotLineX();
 	}
-	inline void DrawScaleY(double (RungeKutta::*TypeScaleY)(int )) {
+	inline void DrawScaleY(double (DuffingSolv::*TypeScaleY)(int )) {
 		std::string Tmp;
 		for (auto i = 0; i < Scale; i++) {
 			if (i!=5) {
@@ -149,6 +72,7 @@ class RungeKutta {
 				else
 				{
 					Tmp.erase(Tmp.begin() + 4, Tmp.end());
+					Tmp = "    " + Tmp;
 				}
 				glutBitmapString(GLUT_BITMAP_TIMES_ROMAN_10, reinterpret_cast<const unsigned char*>(Tmp.c_str()));
 			}
@@ -157,7 +81,7 @@ class RungeKutta {
 
 
 	}
-	inline void DrawScale(double (RungeKutta::*TypeScaleX)(int i), double (RungeKutta::*TypeScaleY)(int i)) {
+	inline void DrawScale(double (DuffingSolv::*TypeScaleX)(int i), double (DuffingSolv::*TypeScaleY)(int i)) {
 		DrawScaleX(TypeScaleX);
 		DrawScaleY(TypeScaleY);
 	}
@@ -171,34 +95,39 @@ class RungeKutta {
 		return MaxPara.p / Range*(i - Scale / 2);
 	}
 public:
-	template<class TYPE,class NUM> RungeKutta(const TYPE dt, const TYPE TRange, const NUM NumSeg) {
-		Output.resize((int)(TRange/dt+1)) ;
-		Calcx.resize(NumSeg);
-		Calcdxdt.resize(NumSeg);
-		
+	double Range;
+	template<class TYPE,class NUM> DuffingSolv(const TYPE dt, const TYPE TRange, const NUM NumSeg) {
+		Output.resize((int)(TRange / dt + 1));
+		Analyze.resize((int)(TRange / dt + 1));
+		Solver.Init();
+		SetCoffdfdt = FALSE;
+		Range = InitRange;
 	}
-	inline void SetParam(const Cofficient SetCoff,  const InputRung Inp) {
-		CoffList = SetCoff;
+	inline void SetParam(Cofficient SetCoff, const InputRung Inp) {
+		CoffList.SetCoff(SetCoff);
 		InitStatus = Inp;
+		Solver.SetCoff(SetCoff);
+	}
+	inline void SetParamdfdt(Cofficient SetCoff, const InputRung Inp) {
+		 auto Div = (int)(CoffList.Getdt()/SetCoff.Getdt());
+		CoffList.Init(Div, &InitStatus);
+		CoffList.SetdCoffdfdt(SetCoff);
+		CoffList.SelectCalcCoff();
+		SetCoffdfdt = TRUE;
 	}
 	inline void CalcDffingEqudydx() {
 		Output[0] = InitStatus;
-		double H = CoffList.Getdt();
-		for (auto DataPos = 0; DataPos < Output.size()-1;DataPos++) {
-			InputRung Status = Output[DataPos];
-			Calcdxdt[0] = H*Getdydx(Status, 0.0, 0.0, 0.0);
-			Calcx[0] = H*(Status.p + 0.5*Calcdxdt[0]);
-			for (auto i = 1; i < 3; i++) {
-				Calcdxdt[i] = H*Getdydx(Status, H / 2.0, Calcx[i - 1] / 2, Calcdxdt[i - 1] / 2);
-				Calcx[i] = H*(Status.p + 0.5* Calcdxdt[i]);
+		if (SetCoffdfdt) {
+			for (auto Itr = Output.begin(); Itr != Output.end(); Itr++) {
+				Solver.CalcRungeSolveOnce(&(*Itr));
+				CoffList.UpdateCoff();
+				Solver.SetCoff(CoffList);
 			}
-			Calcdxdt[3] = H*Getdydx(Status, H, Calcx[2], Calcdxdt[2]);
-			Calcx[3] = H*(Status.p + 0.5*Calcdxdt[3]);
-			Output[DataPos + 1].t = CoffList.Getdt() + Status.t;
-			Output[DataPos + 1].x = (Calcx[0] + 2.0*Calcx[1] + 2.0*Calcx[2] + Calcx[3]) / 6.0 + Status.x;
-			Output[DataPos + 1].p = (Calcdxdt[0] + 2.0*Calcdxdt[1] + 2.0*Calcdxdt[2] + Calcdxdt[3]) / 6.0 + Status.p;
-			
 		}
+		else {
+			Solver.CalcRungeSolve(&Output);
+		}
+
 	}
 	inline void OutputCSV() {
 		std::ofstream OutputFile("RungKutta001.csv",std::ofstream::trunc|std::ofstream::out);
@@ -213,27 +142,31 @@ public:
 
 	}
 	inline void MakeGraphData() {
-		auto Maxx = Output[0].x;
-		auto Maxp = Output[0].p;
+		SearchMax();
+		Quantum();
+	}
+	inline void Quantum() {
+		for (auto i = 0; i < Output.size(); i++) {
+			Output[i].x = Output[i].x / (MaxPara.x / Range);
+			Output[i].p = Output[i].p / (MaxPara.p / Range);
+			Output[i].t = Output[i].t / (Output.size()*CoffList.Getdt() / 2.0) - 1.0;
+		}
+
+	}
+	inline void SearchMax() {
+		MaxPara.x = Output[0].x;
+		MaxPara.p = Output[0].p;
 
 		for (auto i = 1; i < Output.size(); i++) {
-			if (Maxx < Output[i].x) 
+			if (MaxPara.x < Output[i].x)
 			{
-				Maxx = Output[i].x;
+				MaxPara.x = Output[i].x;
 			}
-			if (Maxp < Output[i].p)
+			if (MaxPara.p < Output[i].p)
 			{
-				Maxp = Output[i].p;
+				MaxPara.p = Output[i].p;
 			}
 		}
-		for (auto i = 0; i < Output.size(); i++) {
-			Output[i].x = Output[i].x / (Maxx / Range);
-			Output[i].p = Output[i].p / (Maxp / Range);
-			Output[i].t = Output[i].t / (Output.size()*CoffList.Getdt()/2.0)- 1.0;
-		}
-		this->MaxPara.x = Maxx;
-		this->MaxPara.p = Maxp;
-
 	}
 	inline void DrawOutputXP() {
 		glProtColor;
@@ -261,7 +194,7 @@ public:
 		}
 		glEnd();
 	}
-	inline void DrawAxis(double (RungeKutta::*TypeScaleX)(int), double (RungeKutta::*TypeScaleY)(int)) {
+	inline void DrawAxis(double (DuffingSolv::*TypeScaleX)(int), double (DuffingSolv::*TypeScaleY)(int)) {
 		DrawScale(TypeScaleX, TypeScaleY);
 		glAxisColor;
 		glBegin(GL_LINES);
@@ -277,22 +210,28 @@ public:
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		Rung_global_pointer->DrawOutputTX();
-		Rung_global_pointer->DrawAxis(&RungeKutta::GetScaleT, &RungeKutta::GetScaleX);
+		Rung_global_pointer->DrawAxis(&DuffingSolv::GetScaleT, &DuffingSolv::GetScaleX);
 		glutSwapBuffers();
 	}
 	inline static void dispXP() {
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		Rung_global_pointer->DrawOutputXP();
-		Rung_global_pointer->DrawAxis(&RungeKutta::GetScaleX, &RungeKutta::GetScaleP);
+		Rung_global_pointer->DrawAxis(&DuffingSolv::GetScaleX, &DuffingSolv::GetScaleP);
 		glutSwapBuffers();
 	}
 	inline static void dispTP() {
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		Rung_global_pointer->DrawOutputTP();
-		Rung_global_pointer->DrawAxis(&RungeKutta::GetScaleT, &RungeKutta::GetScaleP);
+		Rung_global_pointer->DrawAxis(&DuffingSolv::GetScaleT, &DuffingSolv::GetScaleP);
 		glutSwapBuffers();
+	}
+	inline static void MouseWheel(int wheel_number, int direction, int x, int y){
+		if (direction == 1) { Rung_global_pointer->Range += 0.01; }
+		else { Rung_global_pointer->Range -= 0.01; }
+		Rung_global_pointer->Quantum();
+		glutPostRedisplay();
 	}
 	inline void Draw() {
 		int argc = 0;
@@ -303,32 +242,40 @@ public:
 		winID[0] = glutCreateWindow("Duffing T-X");
 		font = new GLFONT(L"‚l‚r–¾’©", 24);
 		glutDisplayFunc(dispTX);
+		glutMouseWheelFunc(MouseWheel);
 		glutInitWindowPosition(600, 100);
 		glutInitWindowSize(400, 300);
 		winID[1] = glutCreateWindow("Duffing T-P");
 		glutDisplayFunc(dispTP);
+		glutMouseWheelFunc(MouseWheel);
 		glutInitWindowPosition(200, 500);
 		glutInitWindowSize(400, 300);
 		winID[1] = glutCreateWindow("Duffing X-P");
 		glutDisplayFunc(dispXP);
+		glutMouseWheelFunc(MouseWheel);
 		glutMainLoop();
 	}
 };
 
 
+
 void main() {
-	RungeKutta Rung(0.01,1000.0,4);
-	Rung_global_pointer = &Rung;
+	DuffingSolv Duff(0.01, 1000.0, 4);
+	Rung_global_pointer = &Duff;
 	InputRung Input;
 	Input.p = 0.0;
 	Input.x = 0.3;
 	Input.t = 0.0;
 	Cofficient InputCof;
-	
-	InputCof.SetCoff(0.01,0.2,1.0 ,1.00, 0.3, 1/(2*PI), 0);
-	Rung.SetParam(InputCof,Input);
-	Rung.CalcDffingEqudydx();
-	Rung.OutputCSV();
-	Rung.MakeGraphData();
-	Rung.Draw();
+	Cofficient InputCofdfdt;
+
+//	InputCof.SetCoff(0.01, 0.2, 1.0, 1.00, 0.3, 1 / (2 * PI), 0);
+	InputCof.SetCoff(0.01, 0.2, 1.0, 1.00, 0.3, 0.1 / (2 * PI), 0);
+	Duff.SetParam(InputCof, Input);
+	InputCofdfdt.SetCoff(0.001,-0.001, 0.0, 0.0, 0.0, 0.0		,0);
+	Duff.SetParamdfdt(InputCofdfdt, Input);
+	Duff.CalcDffingEqudydx();
+	Duff.OutputCSV();
+	Duff.MakeGraphData();
+	Duff.Draw();
 }
