@@ -11,6 +11,7 @@ int winID[4];
 #define glScaleColor		glColor3d(1.0,1.0,1.0)
 #define glScalePlotColor	glColor3d(0.5,0.5,0.5)
 #define glMassColor			glColor3d(0.5,0.5,0.5)
+#define glScaleFont			GLUT_BITMAP_HELVETICA_18
 void Idle() {
 	glutPostRedisplay();
 }
@@ -68,7 +69,7 @@ class DuffingSolv {
 				Tmp.erase(Tmp.begin() + 4, Tmp.end());
 			}
 			glRasterPos2d(-1.0+i*0.2, 0);
-			glutBitmapString(GLUT_BITMAP_TIMES_ROMAN_10, reinterpret_cast<const unsigned char*>(Tmp.c_str()));
+			glutBitmapString(glScaleFont, reinterpret_cast<const unsigned char*>(Tmp.c_str()));
 		}
 		DrawScalePlotLineX();
 	}
@@ -86,9 +87,9 @@ class DuffingSolv {
 				else
 				{
 					Tmp.erase(Tmp.begin() + 4, Tmp.end());
-					Tmp = "    " + Tmp;
+					Tmp = "  " + Tmp;
 				}
-				glutBitmapString(GLUT_BITMAP_TIMES_ROMAN_10, reinterpret_cast<const unsigned char*>(Tmp.c_str()));
+				glutBitmapString(glScaleFont, reinterpret_cast<const unsigned char*>(Tmp.c_str()));
 			}
 		}
 		DrawScalePlotLineY();
@@ -313,7 +314,7 @@ public:
 		glutDisplayFunc(dispXP);
 		glutMouseWheelFunc(MouseWheel);
 		glutInitWindowPosition(600, 500);
-		glutInitWindowSize(400, 300);
+		glutInitWindowSize(400, 400);
 		winID[3] = glutCreateWindow("Duffing Physhics Model");
 		glutDisplayFunc(dispModel);
 		glutMainLoop();
@@ -323,19 +324,28 @@ public:
 
 
 void main() {
-	DuffingSolv Duff(0.01, 1000.0, 4);
+	DuffingSolv Duff(0.01, 200.0, 4);
 	Rung_global_pointer = &Duff;
 	InputRung Input;
+	
 	Input.p = 0.0;
-	Input.x = 0.3;
+	Input.x = 0.500;
 	Input.t = 0.0;
 	Cofficient InputCof;
 	Cofficient InputCofdfdt;
 
 //	InputCof.SetCoff(0.01, 0.2, 1.0, 1.00, 0.3, 1 / (2 * PI), 0);
-	InputCof.SetCoff(0.01, 0.2, 1.0, 1.00, 0.3, 0.1 / (2 * PI), 0);
+//	InputCof.SetCoff(0.01, 0.1, -2.0 / 4.0, 2.00, 2.0, 2.4 / (2 * PI), 0.0);
+//	InputCof.SetRawData(1.0, 0.1, 0.025, 2.4 / (2 * PI), 3.0, 0.01, 0.5, 0.0);
+	InputCof.SetRawData(1.0, 0.1, 0.025, -2.4 / (2 * PI), 3.0, 0.01, 0.5, 0.0);
+//	InputCof.SetRawData(1.0, 0.1, 0.050, 2.4 / (2 * PI), 3.0, 0.01, 0.5, 0.0);
+//	InputCof.SetRawData(1.0, 0.1, 0.050, 2.4 / (2 * PI), 3.0, 0.01, 3.5, 0.0);
+//	InputCof.SetRawData(1.0, 0.2, 0.025, 2.4 / (2 * PI), 3.0, 0.01, 0.5, 0.0);
+//	InputCof.SetCoff(0.01, -0.2, -1.0 , 1.00, 0.3, 1.0 / (2 * PI), 0.0);
 	Duff.SetParam(InputCof, Input);
-	InputCofdfdt.SetCoff(0.001,-0.001, 0.0, 0.0, 0.0, 0.0		,0);
+	InputCofdfdt.SetCoff(0.001, 0.1, 0.0, 0.0, 0.0, 0.0, 0);
+//	InputCofdfdt.SetCoff(0.001, 0.008, 0.00, 0.0, 0.0, 0.01 / (2 * PI), 0);
+//	InputCofdfdt.SetRawData(1.0, 0.1, 0.025, 2.4 / (2 * PI), 3.0, 0.00010, 0.50, 0.0);
 	Duff.SetParamdfdt(InputCofdfdt, Input);
 	Duff.CalcDffingEqudydx();
 	Duff.OutputCSV();

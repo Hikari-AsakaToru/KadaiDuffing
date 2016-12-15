@@ -7,6 +7,7 @@
 #include <limits>
 #define PI 4*std::atan(1)
 #define InitRange 0.7
+#define PlotRange 1.0
 #define InitOffset 0.0
 #define Scale 10
 struct Max
@@ -111,10 +112,10 @@ class RungeKuttaSolve {
 	std::vector<double> Calcdxdt;
 	Cofficient CoffList;
 	double Getdydx(const InputRung Inp, const double t, const double x, const double p) {
-		return -CoffList.GetCoffdydx()*(Inp.p + p)
-			+ CoffList.GetCoffx()*(Inp.x + x)
-			- CoffList.GetCoffx3()*std::pow((Inp.x + x), 3.0)
-			+ CoffList.GetCoffcos()*std::cos(CoffList.GetOmega()*(Inp.t + t));
+		return -CoffList.GetCoffdydx()	*(Inp.p + p)
+			- CoffList.GetCoffx()		*(Inp.x + x)
+			- CoffList.GetCoffx3()		*std::pow((Inp.x + x), 3.0)
+			+ CoffList.GetCoffcos()		*std::cos(CoffList.GetOmega()*(Inp.t + t));
 	}
 public:
 	RungeKuttaSolve() {
@@ -157,14 +158,18 @@ public:
 		double H = CoffList.Getdt();
 		InputRung Status = (*Output);
 		Output++;
+		
 		Calcdxdt[0] = H*Getdydx(Status, 0.0, 0.0, 0.0);
-		Calcx[0] = H*(Status.p + 0.5*Calcdxdt[0]);
+		Calcx[0]	= H*(Status.p + 0.5*Calcdxdt[0]);
+		
 		for (auto i = 1; i < 3; i++) {
 			Calcdxdt[i] = H*Getdydx(Status, H / 2.0, Calcx[i - 1] / 2, Calcdxdt[i - 1] / 2);
-			Calcx[i] = H*(Status.p + 0.5* Calcdxdt[i]);
+			Calcx[i]	= H*(Status.p + 0.5* Calcdxdt[i]);
 		}
+		
 		Calcdxdt[3] = H*Getdydx(Status, H, Calcx[2], Calcdxdt[2]);
-		Calcx[3] = H*(Status.p + 0.5*Calcdxdt[3]);
+		Calcx[3]	= H*(Status.p + 0.5*Calcdxdt[3]);
+
 		(*Output).t = CoffList.Getdt() + Status.t;
 		(*Output).x = (Calcx[0] + 2.0*Calcx[1] + 2.0*Calcx[2] + Calcx[3]) / 6.0 + Status.x;
 		(*Output).p = (Calcdxdt[0] + 2.0*Calcdxdt[1] + 2.0*Calcdxdt[2] + Calcdxdt[3]) / 6.0 + Status.p;
